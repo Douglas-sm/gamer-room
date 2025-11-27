@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Premia Gaming Academy</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        background: #0e0e12;
+        color: #f5f5f5;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        min-height: 100vh;
+      }
+
+      main {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        margin: 0 auto;
+        max-width: 900px;
+        padding: 1.5rem;
+        text-align: center;
+      }
+
+      canvas {
+        border-radius: 0.75rem;
+        box-shadow: 0 25px 60px rgba(0, 0, 0, 0.55);
+      }
+
+      .camera-controls {
+        position: fixed;
+        right: 1.25rem;
+        bottom: 1.25rem;
+        display: grid;
+        grid-template-columns: repeat(3, 3rem);
+        gap: 0.4rem;
+        z-index: 20;
+      }
+
+      .camera-controls button {
+        width: 3rem;
+        height: 3rem;
+        border-radius: 0.75rem;
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        background: rgba(10, 14, 28, 0.8);
+        color: #f4fbff;
+        font-size: 1.1rem;
+        cursor: pointer;
+        transition: transform 0.15s ease, background 0.15s ease;
+      }
+
+      .camera-controls button:focus-visible {
+        outline: 2px solid #63d1ff;
+        outline-offset: 2px;
+      }
+
+      .camera-controls button:hover {
+        background: rgba(18, 26, 46, 0.95);
+        transform: translateY(-1px);
+      }
+
+      .camera-controls button[data-camera-action="reset"] {
+        grid-column: span 3;
+      }
+
+      .modal {
+        align-items: center;
+        background: rgba(7, 10, 20, 0.8);
+        bottom: 0;
+        display: none;
+        justify-content: center;
+        left: 0;
+        padding: 1rem;
+        position: fixed;
+        right: 0;
+        top: 0;
+        z-index: 10;
+      }
+
+      .modal.open {
+        display: flex;
+      }
+
+      .modal-content {
+        background: #10162a;
+        border: 2px solid #63d1ff;
+        border-radius: 1rem;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+        color: #f4fbff;
+        max-width: 420px;
+        padding: 1.5rem;
+        position: relative;
+        width: 100%;
+      }
+
+      .modal-close {
+        background: transparent;
+        border: none;
+        color: #ffffff;
+        cursor: pointer;
+        font-size: 1.5rem;
+        line-height: 1;
+        position: absolute;
+        right: 1rem;
+        top: 1rem;
+      }
+
+      .modal-title {
+        font-size: 1.4rem;
+        margin-bottom: 0.5rem;
+      }
+
+      .modal-subtitle {
+        color: #8ad9ff;
+        font-size: 0.95rem;
+        margin-bottom: 1rem;
+      }
+
+      .modal-body {
+        color: #dfe8ff;
+        line-height: 1.5;
+        margin-bottom: 1rem;
+      }
+
+      .feature-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.6rem;
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+
+      .feature-list li {
+        background: #18203a;
+        border-left: 4px solid #63d1ff;
+        border-radius: 0.5rem;
+        padding: 0.65rem 0.85rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Premia Gaming Academy</h1>
+        <p>Explore uma sala de aula gamer com alunos competindo e o professor organizando a partida.</p>
+      </header>
+      <div id="scene"></div>
+    </main>
+    <section id="monitor-modal" class="modal" aria-hidden="true">
+      <article class="modal-content" role="dialog" aria-modal="true">
+        <button id="modal-close" class="modal-close" aria-label="Fechar infográfico">&times;</button>
+        <h2 id="modal-title" class="modal-title"></h2>
+        <p id="modal-subtitle" class="modal-subtitle"></p>
+        <p id="modal-body" class="modal-body"></p>
+        <ul id="modal-features" class="feature-list"></ul>
+      </article>
+    </section>
+    <div class="camera-controls" aria-label="Controles de câmera">
+      <button data-camera-action="rotateUp" aria-label="Rotacionar para cima">⤴︎</button>
+      <button data-camera-action="zoomIn" aria-label="Aproximar">＋</button>
+      <button data-camera-action="rotateRight" aria-label="Rotacionar para a direita">⤵︎</button>
+      <button data-camera-action="rotateLeft" aria-label="Rotacionar para a esquerda">⤷</button>
+      <button data-camera-action="zoomOut" aria-label="Afastar">－</button>
+      <button data-camera-action="rotateDown" aria-label="Rotacionar para baixo">⤶</button>
+      <button data-camera-action="reset" aria-label="Centralizar cena">Reset</button>
+    </div>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js"
+        }
+      }
+    </script>
+    <script type="module">
+      import * as THREE from "three";
+      import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/controls/OrbitControls.js";
+
+      const container = document.getElementById("scene");
+      const modal = document.getElementById("monitor-modal");
+      const modalTitle = document.getElementById("modal-title");
+      const modalSubtitle = document.getElementById("modal-subtitle");
+      const modalBody = document.getElementById("modal-body");
+      const modalFeatures = document.getElementById("modal-features");
+      const modalClose = document.getElementById("modal-close");
+      const cameraButtons = document.querySelectorAll("[data-camera-action]");
+
+      const interactiveObjects = [];
+      const raycaster = new THREE.Raycaster();
+      const pointer = new THREE.Vector2();
+      const pulseEntries = [];
+      const pulseTargetColor = new THREE.Color(0xffffff);
+      const pulseDuration = 2;
+
+      const instructionsInfo = {
+        title: "Como navegar pela Arena 3D",
+        subtitle: "Use o mouse para explorar a sala",
+        description:
+          "Gire, aproxime e desloque a câmera antes de interagir com os objetos pulsantes. Isso ajuda a entender totalmente o layout da sala gamer.",
+        features: [
+          "Botão esquerdo + arrastar: orbitar a câmera",
+          "Scroll: aproximar ou afastar",
+          "Botão direito + arrastar: mover (pan) a visão",
+          "Clique nos ícones pulsantes para abrir os infográficos",
+        ],
+      };
+
+      const monitorInfo = {
+        title: "Monitor Gamer 27\" 144 Hz",
+        subtitle: "Especificações padrão das estações pro gamer",
+        description:
+          "Todas as posições contam com um monitor de 27 polegadas, painel IPS premium e taxa real de 144 Hz, garantindo transições ultrafluidas e visibilidade ampliada para treinos competitivos.",
+        features: [
+          "Painel IPS com 1 ms GTG e contraste otimizado",
+          "Resolução 2560 x 1440 para enxergar mais área do mapa",
+          "Compatível com FreeSync Premium e G-Sync",
+          "Hub integrado com HDMI 2.1, DisplayPort 1.4 e USB",
+        ],
+      };
+      const stationInfos = Array(8).fill(monitorInfo);
+
+      const chairInfos = [
+        {
+          title: "Cadeira Gamer Drift-X",
+          subtitle: "Espuma de alta densidade e apoio lombar magnético",
+          description:
+            "Projetada para longas sessões de treino, a Drift-X usa espuma injetada de alta densidade, mantendo postura correta e evitando fadiga mesmo após horas em frente ao PC.",
+          features: [
+            "Pistão classe 4 com ajuste de altura suave",
+            "Encosto reclinável até 165° para descanso rápido",
+            "Apoios de braço 4D com toque macio",
+            "Base metálica com rodas silenciosas de 65 mm",
+          ],
+        },
+        {
+          title: "Cadeira Gamer Vertex Pro",
+          subtitle: "Revestimento híbrido e costura reforçada",
+          description:
+            "A Vertex Pro combina tecido respirável com PU premium, garantindo conforto térmico e durabilidade ideal para laboratórios gamers cheios de PCs ligados.",
+          features: [
+            "Suporta até 150 kg com estrutura de aço",
+            "Inclinação sincronizada com trava multipontos",
+            "Almofada cervical em memory foam",
+            "Apoio lombar com regulagem de altura",
+          ],
+        },
+        {
+          title: "Cadeira Gamer Nebula Seat",
+          subtitle: "Design inspirado em cockpits de corrida",
+          description:
+            "Com laterais reforçadas e trilhos laterais para acessórios, a Nebula Seat dá estabilidade extra durante partidas intensas e mantém o visual profissional.",
+          features: [
+            "Apoio para headset integrado",
+            "Encosto com ajuste independente do assento",
+            "Revestimento PU antiabrasivo resistente ao suor",
+            "Apoios de braço com rotação lateral",
+          ],
+        },
+        {
+          title: "Cadeira Gamer Flux Ergo",
+          subtitle: "Encosto em mesh ventilado",
+          description:
+            "A Flux Ergo incorpora encosto em malha premium que dissipa calor rapidamente, ideal para ambientes com iluminação forte e vários computadores.",
+          features: [
+            "Malha flexível com suporte multi-zona",
+            "Sistema de inclinação sincronizado",
+            "Base em alumínio escovado",
+            "Rodízios revestidos em PU anti-risco",
+          ],
+        },
+      ];
+
+      const keyboardInfos = [
+        {
+          title: "Teclado Gamer Pulse K60",
+          subtitle: "Switches ópticos e resposta imediata",
+          description:
+            "O Pulse K60 utiliza switches ópticos lineares que reduzem ao máximo a demora na ativação, perfeito para contragolpes em jogos FPS competitivos.",
+          features: [
+            "Polling rate de 1000 Hz",
+            "Keycaps em PBT double-shot",
+            "Layout ABNT2 com macros dedicadas",
+            "Iluminação RGB por tecla sincronizável",
+          ],
+        },
+        {
+          title: "Teclado Gamer Nebula TKL",
+          subtitle: "Formato compacto e construção em alumínio",
+          description:
+            "Sem o teclado numérico, o Nebula TKL deixa mais espaço para o mouse sem sacrificar atalhos, mantendo um chassi em alumínio escovado super rígido.",
+          features: [
+            "Switches hot-swap compatíveis com MX",
+            "Cabo USB-C removível para transporte",
+            "Rotações de iluminação pré-programadas",
+            "Modo game com bloqueio de Windows key",
+          ],
+        },
+        {
+          title: "Teclado Gamer Horizon 75",
+          subtitle: "Espuma interna para som suave",
+          description:
+            "O Horizon 75 entrega experiência premium com juntas amortecidas e espuma acústica, tornando cada clique firme e silencioso mesmo em labs repletos.",
+          features: [
+            "Knob multifuncional para volume e efeitos",
+            "Switches lubrificados de fábrica",
+            "Estabilizadores plate-mount silenciosos",
+            "Compatível com software de remapeamento",
+          ],
+        },
+      ];
+
+      function openModal(info) {
+        modalTitle.textContent = info.title;
+        modalSubtitle.textContent = info.subtitle;
+        modalBody.textContent = info.description;
+        modalFeatures.innerHTML = "";
+        info.features.forEach((feature) => {
+          const item = document.createElement("li");
+          item.textContent = feature;
+          modalFeatures.appendChild(item);
+        });
+        modal.classList.add("open");
+        modal.setAttribute("aria-hidden", "false");
+      }
+
+      function closeModal() {
+        modal.classList.remove("open");
+        modal.setAttribute("aria-hidden", "true");
+      }
+
+      function registerInteractive(object3D, info) {
+        if (!info) return;
+        const entry = { materials: [], phase: Math.random() * Math.PI * 2 };
+        object3D.traverse((child) => {
+          child.userData.modalInfo = info;
+          if (child.isMesh && child.material && child.material.color) {
+            child.material = child.material.clone();
+            entry.materials.push({
+              material: child.material,
+              baseColor: child.material.color.clone(),
+            });
+          }
+        });
+        interactiveObjects.push(object3D);
+        if (entry.materials.length) {
+          pulseEntries.push(entry);
+        }
+      }
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth * 0.9, window.innerHeight * 0.75);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      container.appendChild(renderer.domElement);
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0xf4f7ff);
+      const clock = new THREE.Clock();
+
+      const camera = new THREE.PerspectiveCamera(
+        45,
+        renderer.domElement.width / renderer.domElement.height,
+        0.1,
+        100
+      );
+      camera.position.set(12, 10, 18);
+
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.target.set(0, 2, 0);
+      const defaultCameraPosition = new THREE.Vector3(12, 10, 18);
+      const defaultTarget = new THREE.Vector3(0, 2, 0);
+
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.75);
+      scene.add(ambientLight);
+
+      const dirLight = new THREE.DirectionalLight(0xffffff, 1.25);
+      dirLight.position.set(10, 18, 6);
+      dirLight.castShadow = true;
+      scene.add(dirLight);
+
+      const rimLight = new THREE.DirectionalLight(0xc7dfff, 0.55);
+      rimLight.position.set(-12, 15, -8);
+      scene.add(rimLight);
+
+      const hemiLight = new THREE.HemisphereLight(0xfaffff, 0xf0f2ff, 0.65);
+      scene.add(hemiLight);
+
+      // Floor
+      const floorGeo = new THREE.PlaneGeometry(26, 18);
+      const floorMat = new THREE.MeshStandardMaterial({
+        color: 0xf5f7ff,
+        metalness: 0.2,
+        roughness: 0.4,
+      });
+      const floor = new THREE.Mesh(floorGeo, floorMat);
+      floor.rotation.x = -Math.PI / 2;
+      floor.receiveShadow = true;
+      scene.add(floor);
+
+      const neonBlueMaterial = new THREE.MeshStandardMaterial({
+        color: 0x00f5ff,
+        emissive: 0x00e0ff,
+        emissiveIntensity: 1.1,
+        metalness: 0.9,
+        roughness: 0.2,
+      });
+      const neonMagentaMaterial = new THREE.MeshStandardMaterial({
+        color: 0xff3cff,
+        emissive: 0xff3cff,
+        emissiveIntensity: 0.9,
+        metalness: 0.7,
+      });
+      const chairMaterial = new THREE.MeshStandardMaterial({
+        color: 0x1d1f2a,
+        metalness: 0.5,
+        roughness: 0.45,
+      });
+      const deskMaterial = new THREE.MeshStandardMaterial({
+        color: 0xfdfdfd,
+        metalness: 0.3,
+        roughness: 0.35,
+      });
+      const legMaterial = new THREE.MeshStandardMaterial({
+        color: 0xd7d9e2,
+        metalness: 0.6,
+        roughness: 0.35,
+      });
+      const monitorMaterial = new THREE.MeshStandardMaterial({
+        color: 0x080c12,
+        metalness: 0.9,
+      });
+      const screenMaterial = new THREE.MeshStandardMaterial({
+        color: 0x051320,
+        emissive: 0x00fbe4,
+        emissiveIntensity: 1.1,
+        metalness: 0.75,
+      });
+      const pcCaseMaterial = new THREE.MeshStandardMaterial({
+        color: 0xfefefe,
+        metalness: 0.65,
+        roughness: 0.35,
+        emissive: 0x0a0a0c,
+      });
+      const pcGlowMaterial = new THREE.MeshStandardMaterial({
+        color: 0x5fd1ff,
+        emissive: 0x5fd1ff,
+        emissiveIntensity: 0.9,
+      });
+
+      // Walls com estilo mais futurista
+      const wallMaterial = new THREE.MeshStandardMaterial({
+        color: 0xfcfdff,
+        metalness: 0.15,
+        roughness: 0.65,
+      });
+      const backWall = new THREE.Mesh(new THREE.BoxGeometry(24, 8, 0.3), wallMaterial);
+      backWall.position.set(0, 4, -8);
+      const sideWallLeft = backWall.clone();
+      sideWallLeft.rotation.y = Math.PI / 2;
+      sideWallLeft.position.set(-12, 4, 0);
+      const sideWallRight = sideWallLeft.clone();
+      sideWallRight.position.set(12, 4, 0);
+      scene.add(backWall, sideWallLeft, sideWallRight);
+
+      // LEDs decorativos no piso
+      const stripGeometryLong = new THREE.BoxGeometry(24, 0.05, 0.15);
+      const stripGeometrySide = new THREE.BoxGeometry(16, 0.05, 0.15);
+      const frontStrip = new THREE.Mesh(stripGeometryLong, neonBlueMaterial);
+      frontStrip.position.set(0, 0.01, -7.9);
+      const midStrip = frontStrip.clone();
+      midStrip.position.z = 7.9;
+      const leftStrip = new THREE.Mesh(stripGeometrySide, neonMagentaMaterial);
+      leftStrip.rotation.y = Math.PI / 2;
+      leftStrip.position.set(-11.9, 0.01, 0);
+      const rightStrip = leftStrip.clone();
+      rightStrip.position.x = 11.9;
+      scene.add(frontStrip, midStrip, leftStrip, rightStrip);
+
+      const stageMaterial = new THREE.MeshStandardMaterial({
+        color: 0xf4f4f8,
+        metalness: 0.25,
+        roughness: 0.4,
+      });
+      const stage = new THREE.Mesh(new THREE.BoxGeometry(8, 0.4, 4), stageMaterial);
+      stage.position.set(0, 0.2, -6.5);
+      stage.receiveShadow = true;
+      scene.add(stage);
+
+      const whiteboard = new THREE.Mesh(
+        new THREE.PlaneGeometry(8, 3),
+        new THREE.MeshStandardMaterial({
+          color: 0xffffff,
+          roughness: 0.2,
+          metalness: 0.05,
+          side: THREE.DoubleSide,
+        })
+      );
+      whiteboard.position.set(0, 3.4, -7.95);
+      whiteboard.rotation.y = Math.PI;
+      scene.add(whiteboard);
+
+      const whiteboardFrame = new THREE.Mesh(
+        new THREE.PlaneGeometry(8.2, 3.2),
+        new THREE.MeshStandardMaterial({
+          color: 0xc0c6d8,
+          metalness: 0.4,
+          roughness: 0.25,
+          side: THREE.DoubleSide,
+        })
+      );
+      whiteboardFrame.position.copy(whiteboard.position);
+      whiteboardFrame.rotation.copy(whiteboard.rotation);
+      whiteboardFrame.translateZ(-0.01);
+      scene.add(whiteboardFrame);
+
+      const teacherBoard = new THREE.Mesh(
+        new THREE.PlaneGeometry(4.5, 2),
+        new THREE.MeshStandardMaterial({
+          color: 0xfefefe,
+          roughness: 0.3,
+          metalness: 0.05,
+          side: THREE.DoubleSide,
+        })
+      );
+      teacherBoard.position.set(0, 2.4, -7.6);
+      teacherBoard.rotation.y = Math.PI;
+      scene.add(teacherBoard);
+
+      const teacherBoardFrame = new THREE.Mesh(
+        new THREE.PlaneGeometry(4.7, 2.2),
+        new THREE.MeshStandardMaterial({
+          color: 0xb4bfd1,
+          metalness: 0.2,
+          roughness: 0.4,
+          side: THREE.DoubleSide,
+        })
+      );
+      teacherBoardFrame.position.copy(teacherBoard.position);
+      teacherBoardFrame.rotation.copy(teacherBoard.rotation);
+      teacherBoardFrame.translateZ(-0.01);
+      scene.add(teacherBoardFrame);
+
+      function createDesk({ x, z, rotationY = 0, scale = 1, keyboardInfo = null }) {
+        const desk = new THREE.Group();
+
+        const top = new THREE.Mesh(new THREE.BoxGeometry(3, 0.2, 1.5), deskMaterial);
+        top.position.y = 2;
+        top.castShadow = true;
+        top.receiveShadow = true;
+        desk.add(top);
+
+        // Legs
+        const legGeometry = new THREE.BoxGeometry(0.15, 1.8, 0.15);
+        const legPositions = [
+          [-1.3, 1, -0.6],
+          [1.3, 1, -0.6],
+          [-1.3, 1, 0.6],
+          [1.3, 1, 0.6],
+        ];
+        legPositions.forEach(([lx, ly, lz]) => {
+          const leg = new THREE.Mesh(legGeometry, legMaterial);
+          leg.position.set(lx, ly, lz);
+          leg.castShadow = true;
+          desk.add(leg);
+        });
+
+        // Computer monitor and base
+        const base = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.1, 0.4), legMaterial);
+        base.position.set(0, 2, 0.1);
+        base.castShadow = true;
+        desk.add(base);
+
+        const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.5, 12), legMaterial);
+        stand.position.set(0, 2.2, 0.1);
+        desk.add(stand);
+
+        const monitorGroup = new THREE.Group();
+        monitorGroup.position.set(0, 2.55, 0);
+        monitorGroup.rotation.y = Math.PI;
+        desk.add(monitorGroup);
+
+        const monitor = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.9, 0.1), monitorMaterial);
+        monitor.castShadow = true;
+        monitorGroup.add(monitor);
+
+        const screen = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.7, 0.02), screenMaterial);
+        screen.position.set(0, 0, 0.06);
+        monitorGroup.add(screen);
+
+        // Simple keyboard
+        const keyboard = new THREE.Mesh(new THREE.BoxGeometry(1, 0.05, 0.4), monitorMaterial);
+        keyboard.position.set(0, 2.15, -0.4);
+        keyboard.rotation.y = Math.PI;
+        keyboard.castShadow = true;
+        desk.add(keyboard);
+        registerInteractive(keyboard, keyboardInfo);
+
+        const mousePad = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.02, 0.6), neonMagentaMaterial);
+        mousePad.position.set(0.8, 2.12, -0.3);
+        mousePad.rotation.y = Math.PI;
+        desk.add(mousePad);
+
+        const ledStrip = new THREE.Mesh(new THREE.BoxGeometry(3.1, 0.05, 0.08), neonBlueMaterial);
+        ledStrip.position.set(0, 2.2, -0.7);
+        desk.add(ledStrip);
+
+        const pcCase = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.2, 0.6), pcCaseMaterial);
+        pcCase.position.set(-1.3, 1.4, -0.2);
+        pcCase.castShadow = true;
+        desk.add(pcCase);
+
+        const pcGlow = new THREE.Mesh(new THREE.BoxGeometry(0.45, 1.1, 0.55), pcGlowMaterial);
+        pcGlow.position.copy(pcCase.position);
+        pcGlow.scale.set(0.8, 0.8, 0.8);
+        desk.add(pcGlow);
+
+        desk.position.set(x, 0, z);
+        desk.rotation.y = rotationY;
+        desk.scale.set(scale, 1, scale);
+        desk.userData.monitorGroup = monitorGroup;
+        return desk;
+      }
+
+      function createChair() {
+        const chair = new THREE.Group();
+        const seat = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.15, 1.1), chairMaterial);
+        seat.position.y = 1;
+        seat.castShadow = true;
+        chair.add(seat);
+
+        const back = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.1, 0.15), chairMaterial);
+        back.position.set(0, 1.65, -0.55);
+        back.castShadow = true;
+        chair.add(back);
+
+        const base = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.9, 12), legMaterial);
+        base.position.y = 0.45;
+        base.castShadow = true;
+        chair.add(base);
+
+        const wheelBase = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.6, 6), legMaterial);
+        wheelBase.rotation.z = Math.PI / 2;
+        wheelBase.position.y = 0.25;
+        chair.add(wheelBase);
+
+        return chair;
+      }
+
+      function createAvatar({ color }) {
+        const avatar = new THREE.Group();
+        const suitMaterial = new THREE.MeshStandardMaterial({
+          color,
+          metalness: 0.6,
+          roughness: 0.35,
+          emissive: color,
+          emissiveIntensity: 0.25,
+        });
+
+        const legs = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.7, 14), suitMaterial);
+        legs.position.y = 0.7;
+        legs.castShadow = true;
+        avatar.add(legs);
+
+        const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.4, 1.1, 16), suitMaterial);
+        torso.position.y = 1.4;
+        torso.castShadow = true;
+        avatar.add(torso);
+
+        const head = new THREE.Mesh(
+          new THREE.SphereGeometry(0.33, 20, 20),
+          new THREE.MeshStandardMaterial({
+            color: 0xf0f4ff,
+            roughness: 0.3,
+          })
+        );
+        head.position.y = 2.2;
+        head.castShadow = true;
+        avatar.add(head);
+
+        const visor = new THREE.Mesh(
+          new THREE.SphereGeometry(0.2, 20, 20, Math.PI / 2, Math.PI),
+          new THREE.MeshStandardMaterial({
+            color: 0x0cfbf3,
+            emissive: 0x35ffe4,
+            emissiveIntensity: 0.9,
+            metalness: 1,
+            roughness: 0.1,
+          })
+        );
+        visor.position.set(0, 2.25, 0.25);
+        avatar.add(visor);
+
+        const armGeo = new THREE.BoxGeometry(0.18, 0.8, 0.18);
+        const leftArm = new THREE.Mesh(armGeo, suitMaterial);
+        leftArm.position.set(-0.4, 1.5, 0);
+        leftArm.rotation.z = Math.PI / 6;
+        leftArm.castShadow = true;
+        avatar.add(leftArm);
+
+        const rightArm = leftArm.clone();
+        rightArm.position.x = 0.4;
+        rightArm.rotation.z = -Math.PI / 6;
+        avatar.add(rightArm);
+
+        return avatar;
+      }
+
+      const teacherFocusPoint = new THREE.Vector3(0, 1.5, -6.5);
+
+      function placeStudentDesk(x, z, color, monitorInfoItem, chairInfoItem, keyboardInfoItem) {
+        const desk = createDesk({ x, z, rotationY: Math.PI, scale: 1, keyboardInfo: keyboardInfoItem });
+        scene.add(desk);
+
+        const monitorGroup = desk.userData.monitorGroup;
+        if (monitorGroup) {
+          registerInteractive(monitorGroup, monitorInfoItem);
+        }
+
+        const chair = createChair();
+        chair.position.set(x, 0, z + 1.2);
+        chair.rotation.y = Math.PI;
+        registerInteractive(chair, chairInfoItem);
+        scene.add(chair);
+
+        const avatar = createAvatar({ color });
+        avatar.position.set(x, 0.4, z + 1.2);
+        avatar.lookAt(teacherFocusPoint);
+        scene.add(avatar);
+      }
+
+      const layout = [
+        [-6, -2],
+        [-6, 2],
+        [-2, -2],
+        [-2, 2],
+        [2, -2],
+        [2, 2],
+        [6, -2],
+        [6, 2],
+      ];
+
+      const studentColors = [0x1ad0ff, 0xff3df0, 0x4bff95, 0xffd166, 0x9e7bff, 0xff5f5f, 0x00c2ff, 0x3dffce];
+      layout.forEach(([x, z], index) => {
+        const monitorEntry = stationInfos[index % stationInfos.length];
+        const chairEntry = chairInfos[index % chairInfos.length];
+        const keyboardEntry = keyboardInfos[index % keyboardInfos.length];
+        placeStudentDesk(x, z, studentColors[index], monitorEntry, chairEntry, keyboardEntry);
+      });
+
+      // Professor e lousa
+      const teacherAvatar = createAvatar({ color: 0xffa53d });
+      teacherAvatar.position.set(0, 0, -7.2);
+      teacherAvatar.lookAt(new THREE.Vector3(0, 1.6, -2));
+      scene.add(teacherAvatar);
+
+      function onResize() {
+        const width = window.innerWidth * 0.9;
+        const height = window.innerHeight * 0.75;
+        renderer.setSize(width, height);
+        camera.aspect = width / height;
+        camera.updateProjectionMatrix();
+      }
+
+      window.addEventListener("resize", onResize);
+      cameraButtons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const action = btn.dataset.cameraAction;
+          const rotateStep = 0.25;
+          const zoomFactor = 1.1;
+          switch (action) {
+            case "rotateUp":
+              rotateCameraVertically(rotateStep);
+              break;
+            case "rotateDown":
+              rotateCameraVertically(-rotateStep);
+              break;
+            case "rotateLeft":
+              rotateCameraHorizontally(rotateStep);
+              break;
+            case "rotateRight":
+              rotateCameraHorizontally(-rotateStep);
+              break;
+            case "zoomIn":
+              if (typeof controls.dollyIn === "function") controls.dollyIn(zoomFactor);
+              else camera.position.addScaledVector(camera.getWorldDirection(new THREE.Vector3()), -1);
+              break;
+            case "zoomOut":
+              if (typeof controls.dollyOut === "function") controls.dollyOut(zoomFactor);
+              else camera.position.addScaledVector(camera.getWorldDirection(new THREE.Vector3()), 1);
+              break;
+            case "reset":
+              camera.position.copy(defaultCameraPosition);
+              controls.target.copy(defaultTarget);
+              break;
+            default:
+              break;
+          }
+          controls.update();
+        });
+      });
+
+      function rotateCameraHorizontally(angle) {
+        const offset = new THREE.Vector3();
+        offset.copy(camera.position).sub(controls.target);
+        const spherical = new THREE.Spherical();
+        spherical.setFromVector3(offset);
+        spherical.theta += angle;
+        offset.setFromSpherical(spherical);
+        camera.position.copy(controls.target).add(offset);
+      }
+
+      function rotateCameraVertically(angle) {
+        const offset = new THREE.Vector3();
+        offset.copy(camera.position).sub(controls.target);
+        const spherical = new THREE.Spherical();
+        spherical.setFromVector3(offset);
+        spherical.phi = Math.min(Math.max(0.1, spherical.phi - angle), Math.PI - 0.1);
+        offset.setFromSpherical(spherical);
+        camera.position.copy(controls.target).add(offset);
+      }
+
+      function handleInteractivePointer(event) {
+        const rect = renderer.domElement.getBoundingClientRect();
+        pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        raycaster.setFromCamera(pointer, camera);
+        const intersects = raycaster.intersectObjects(interactiveObjects, true);
+        if (!intersects.length) return;
+        let target = intersects[0].object;
+        while (target && !target.userData.modalInfo) {
+          target = target.parent;
+        }
+        if (target && target.userData.modalInfo) {
+          openModal(target.userData.modalInfo);
+        }
+      }
+
+      renderer.domElement.addEventListener("pointerdown", handleInteractivePointer);
+      modalClose.addEventListener("click", closeModal);
+      modal.addEventListener("click", (event) => {
+        if (event.target === modal) {
+          closeModal();
+        }
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          closeModal();
+        }
+      });
+      window.addEventListener("load", () => {
+        openModal(instructionsInfo);
+      }, { once: true });
+
+      function animate() {
+        controls.update();
+        const elapsed = clock.getElapsedTime();
+        pulseEntries.forEach(({ materials, phase }) => {
+          const pulse = (Math.sin(((elapsed + phase) / pulseDuration) * Math.PI * 2) + 1) / 2;
+          materials.forEach(({ material, baseColor }) => {
+            if (!material.color) return;
+            material.color.copy(baseColor).lerp(pulseTargetColor, pulse);
+          });
+        });
+        renderer.render(scene, camera);
+        requestAnimationFrame(animate);
+      }
+      animate();
+    </script>
+  </body>
+</html>
